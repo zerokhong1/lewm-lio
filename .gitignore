@@ -1,0 +1,23 @@
+# Data — quá lớn, không push
+data/
+upstream/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+
+# Training outputs
+outputs/
+checkpoints/
+wandb/
+*.ckpt
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/

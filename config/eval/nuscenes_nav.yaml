@@ -1,0 +1,16 @@
+defaults:
+  - _self_
+
+policy:
+  checkpoint: outputs/checkpoints/best.ckpt
+
+planner: cem
+planner_config:
+  num_samples: 512
+  opt_steps: 30
+  horizon: 16
+
+data:
+  test_path: ${oc.env:LEWM_DATA_DIR}/processed/nuscenes_bev_test.h5
+
+output_dir: ${oc.env:LEWM_PROJECT_DIR}/outputs/eval
