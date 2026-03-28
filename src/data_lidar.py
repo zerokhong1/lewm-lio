@@ -27,7 +27,7 @@ class LiDARBEVDataset(Dataset):
             self.obs_shape = f['observations'].shape[2:]   # (C, H, W)
             self.action_dim = f['actions'].shape[2]
 
-        self.samples_per_episode = max(0, self.episode_length - self.seq_length)
+        self.samples_per_episode = max(0, self.episode_length - self.seq_length + 1)
         self.total_samples = self.num_episodes * self.samples_per_episode
 
     def __len__(self):
