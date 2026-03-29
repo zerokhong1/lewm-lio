@@ -6,7 +6,11 @@
 set -e
 
 cd ~/lewm-lio
-conda activate lewm
+# Activate conda env (nếu chưa active)
+source /data_wificsi/conda/etc/profile.d/conda.sh 2>/dev/null || \
+    source ~/miniconda3/etc/profile.d/conda.sh 2>/dev/null || \
+    source ~/anaconda3/etc/profile.d/conda.sh 2>/dev/null || true
+conda activate lewm 2>/dev/null || true
 
 DATA="data/processed/nuscenes_mini_bev.h5"
 STEPS=10000
