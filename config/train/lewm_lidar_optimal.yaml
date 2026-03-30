@@ -1,0 +1,47 @@
+# Optimal config dựa trên ablation results
+#
+# Key findings:
+#   - sigreg_lambda=0.1  (best F1=0.716, best planning dist=5.74)
+#   - bev_size=64        (best F1=0.729 trên small data, isotropy tốt nhất)
+#   - latent_dim=192     (best planning dist=4.61, balanced performance)
+#
+# Preprocess data trước:
+#   python scripts/preprocess_bev.py \
+#       --nuscenes_root data/nuscenes \
+#       --version v1.0-mini \
+#       --output data/processed/nuscenes_mini_bev_64.h5 \
+#       --bev_size 64 --resolution 1.6
+#
+# Train:
+#   python src/train.py \
+#       --data_path data/processed/nuscenes_mini_bev_64.h5 \
+#       --config config/train/lewm_lidar_optimal.yaml
+
+model:
+  latent_dim: 192
+  base_channels: 32
+  hidden_dim: 512
+  pred_layers: 3
+  dropout: 0.1
+  action_dim: 3
+
+training:
+  batch_size: 16
+  max_steps: 20000
+  lr: 3.0e-4
+  weight_decay: 1.0e-4
+  sigreg_lambda: 0.1       # KEY: 0.1 outperforms 1.0 on LiDAR BEV
+  sigreg_slices: 512
+  grad_clip: 1.0
+
+data:
+  bev_size: 64              # KEY: 64x64 best on small dataset
+  seq_length: 16
+  bev_channels: 4
+  num_workers: 4
+
+logging:
+  print_every: 200
+  save_every: 5000
+  log_dir: outputs/logs/optimal
+  ckpt_dir: outputs/checkpoints/optimal
