@@ -1,9 +1,17 @@
-% LeWM-LiDAR Paper — IEEE ICRA format
-% Compile: pdflatex lewm_lidar_paper.tex (requires IEEEtran.cls)
-% Or upload to Overleaf and select IEEEtran template
+% LeWM-LiDAR Paper v2 — IEEE ICRA format (draft: article.cls)
+% To submit: swap documentclass to IEEEtran (see comment below)
+%
+% COMPILE (draft):
+%   pdflatex lewm_lidar_paper.tex && bibtex lewm_lidar_paper && pdflatex lewm_lidar_paper.tex
+%
+% SUBMIT (ICRA):
+%   Replace \documentclass line with:
+%   \documentclass[conference]{IEEEtran}
+%   Download IEEEtran.cls: https://www.ieee.org/conferences/publishing/templates.html
 
-\documentclass[letterpaper, 10pt, conference]{IEEEtran}
+\documentclass[10pt,twocolumn,letterpaper]{article}
 
+\usepackage[margin=1in]{geometry}
 \usepackage{times}
 \usepackage{graphicx}
 \usepackage{amsmath}
@@ -11,329 +19,406 @@
 \usepackage{booktabs}
 \usepackage{hyperref}
 \usepackage{url}
-\usepackage{cite}
+\usepackage[numbers]{natbib}
 \usepackage{xcolor}
 \usepackage{subcaption}
+\usepackage{algorithm}
+\usepackage{algorithmic}
+\usepackage{microtype}
 
-% Paths
-\graphicspath{{../outputs/figures/}}
+\graphicspath{{figures/}}
 
-\begin{document}
-
-\title{LeWM-LiDAR: A JEPA-based Latent World Model\\
+% ── Title ─────────────────────────────────────────────────────────────────────
+\title{\textbf{LeWM-LiDAR}: A JEPA-based Latent World Model\\
 for LiDAR Navigation and Degeneracy Detection}
 
 \author{
-  \IEEEauthorblockN{Thai Nguyen}
-  \IEEEauthorblockA{
-    Department of Robotics\\
-    \textit{[Institution]}\\
-    \textit{[City, Country]}\\
-    email@institution.edu
-  }
+  Thai Nguyen \\
+  \textit{[Institution]} \\
+  \texttt{[email]}
 }
 
+\date{}
+
+\begin{document}
 \maketitle
 
-%------------------------------------------------------------
+% ── Abstract ──────────────────────────────────────────────────────────────────
 \begin{abstract}
-We present LeWM-LiDAR, a JEPA-based (Joint Embedding Predictive
+We present \textbf{LeWM-LiDAR}, a JEPA-based (Joint Embedding Predictive
 Architecture) latent world model for LiDAR Bird's-Eye View (BEV)
-observations. LeWM-LiDAR learns a compact latent representation of
-the robot's environment and trains a predictor to model ego-motion
-dynamics. We apply Sign Isotropy Regularization (SIGReg) to
-promote uniform latent distributions, and demonstrate that a
-moderate regularization weight ($\lambda=0.1$) outperforms both
-unregularized and strongly regularized baselines on LiDAR data.
-The learned world model enables (1) efficient CEM-based planning
-in latent space (2.3 ms/query) and (2) surprise-based degeneracy
-detection, achieving F1=0.737 on synthetic perturbations of nuScenes.
-All 192 latent dimensions are utilized ($\sigma_z=0.975$), confirming
-that the encoder learns rich, isotropic representations. Ablation
-studies validate design choices across regularization weight, latent
-dimensionality, and BEV resolution.
+observations, using only two loss terms: one-step latent prediction and
+Sketched Isotropic Gaussian Regularization (SIGReg).
+LeWM-LiDAR learns a compact latent representation of the environment and
+trains a 3-layer MLP predictor conditioned on ego-motion to model scene
+dynamics. We find that a moderate regularization weight ($\lambda{=}0.1$)
+outperforms both unregularized and strongly regularized baselines
+($\lambda{=}1.0$) on LiDAR data—a key difference from pixel-based JEPA
+where $\lambda{=}1.0$ is standard. The learned world model enables
+(1)~efficient CEM-based planning in latent space (${\sim}$2.3~ms/query on
+RTX~5090) and (2)~surprise-based degeneracy detection achieving F1\,=\,0.737
+on three synthetic failure modes (teleportation, sensor freeze, noise burst)
+without additional training or labels. All 192 latent dimensions are
+utilized ($\sigma_z{=}0.975$), confirming isotropic representations.
+Ablation studies across regularization weight, latent dimensionality, and
+BEV resolution validate key design choices.
 \end{abstract}
 
-%------------------------------------------------------------
+% ── I. Introduction ────────────────────────────────────────────────────────────
 \section{Introduction}
 \label{sec:intro}
 
-Reliable autonomous navigation in complex environments requires
-robots to maintain an internal model of the world that supports
-both planning and anomaly detection. Classical Simultaneous
-Localization and Mapping (SLAM) systems are brittle in structurally
-degenerate environments—long corridors, open spaces, and reflective
-surfaces—where geometric constraints become ambiguous~\cite{zhang2016degeneracy}.
+Reliable autonomous navigation in complex environments requires robots to
+maintain an internal model of the world that supports both planning and
+anomaly detection. Classical SLAM systems are brittle in structurally
+degenerate environments---long corridors, open spaces, and reflective
+surfaces---where geometric constraints become ambiguous~\cite{zhang2016degeneracy}.
 
-World models trained on observation sequences offer a promising
-alternative: by learning the dynamics of environment representations,
-a robot can plan ahead and detect anomalous states without relying
-on explicit geometric models~\cite{hafner2023dreamerv3}.
+World models trained on observation sequences offer a promising alternative:
+by learning the dynamics of environment representations, a robot can plan
+ahead and detect anomalous states without relying on explicit geometric
+models~\cite{hafner2023dreamerv3}.
 
-The Joint Embedding Predictive Architecture (JEPA) has recently
-emerged as a compelling approach for learning structured latent
-spaces without pixel-level reconstruction~\cite{lecun2022jepa}.
-Unlike generative models, JEPA trains a predictor to match target
-latent representations, avoiding the blurriness and instability
-associated with pixel-level reconstruction losses.
+The Joint Embedding Predictive Architecture (JEPA)~\cite{lecun2022jepa}
+has emerged as a compelling approach for learning structured latent spaces
+without pixel-level reconstruction. Unlike generative models, JEPA trains
+a predictor to match target latent representations, avoiding the
+blurriness and instability associated with reconstruction losses.
+LeJEPA~\cite{balestriero2024lejepa} formalizes JEPA with Sketched
+Isotropic Gaussian Regularization (SIGReg) to prevent latent collapse,
+demonstrating strong performance on locomotion benchmarks.
 
-Despite progress in JEPA for visual data~\cite{assran2023ijepa},
-no prior work has applied this paradigm to LiDAR BEV observations
-for combined planning and degeneracy detection.
+Despite progress in JEPA for visual~\cite{assran2023ijepa} and
+structured~\cite{zhu2025adljepa} data, no prior work has applied JEPA
+to LiDAR BEV observations for combined planning and degeneracy detection.
 
-\textbf{Contributions:}
+\noindent\textbf{Contributions:}
 \begin{enumerate}
-  \item LeWM-LiDAR: a JEPA world model for LiDAR BEV that achieves
-    full latent utilization (192/192 dims) with near-ideal isotropy.
-  \item A surprise-based degeneracy detector that achieves
-    F1=0.737 on three synthetic failure modes (teleportation,
-    sensor freeze, noise burst) without additional training.
-  \item Ablation studies revealing that LiDAR BEV requires
-    gentler SIGReg ($\lambda=0.1$) than pixel-based JEPA ($\lambda=1.0$).
-  \item CEM-based latent planning with 2.3 ms/query on RTX 5090.
+  \item \textbf{LeWM-LiDAR}: a JEPA world model for LiDAR BEV that
+    achieves full latent utilization (192/192 dims) with near-ideal
+    isotropy ($\sigma_z{=}0.975$) using only prediction and SIGReg losses.
+  \item \textbf{Surprise-based degeneracy detection} that achieves
+    F1\,=\,0.737 on three synthetic LiDAR failure modes without any
+    additional training or labeled anomalies.
+  \item \textbf{SIGReg tuning finding}: LiDAR BEV data requires
+    $\lambda{=}0.1$, significantly less than the $\lambda{=}1.0$ used
+    for pixel-based JEPA, due to the implicit regularization from
+    BEV voxelization.
+  \item \textbf{CEM latent planning} with 2.3~ms/query, and ablation
+    studies revealing a planning--detection trade-off with respect to
+    latent dimensionality.
 \end{enumerate}
 
-%------------------------------------------------------------
+% ── II. Related Work ──────────────────────────────────────────────────────────
 \section{Related Work}
 \label{sec:related}
 
-\textbf{World models for navigation.}
-DreamerV3~\cite{hafner2023dreamerv3} learns a recurrent state space
-model and has shown strong performance across diverse tasks.
-NWM~\cite{yang2023nwm} extends world models to navigation-specific
-objectives. Our approach differs by adopting JEPA's
-non-generative formulation, avoiding pixel reconstruction.
+\noindent\textbf{World Models for Navigation.}
+DreamerV3~\cite{hafner2023dreamerv3} learns a recurrent state-space model
+achieving strong performance across diverse tasks, but relies on pixel
+reconstruction. DINO-WM~\cite{zhou2025dinowm} applies JEPA-style world
+modeling to visual manipulation using frozen DINO features, demonstrating
+that non-generative objectives suffice for planning. Steinmetz et
+al.~\cite{steinmetz2023lidarwm} explore world models for LiDAR-based
+navigation, though without latent-space planning or anomaly detection.
+NWM~\cite{yang2023nwm} extends world models to semantic navigation.
+Our approach unifies planning and degeneracy detection in a single
+non-generative model.
 
-\textbf{JEPA on structured data.}
-I-JEPA~\cite{assran2023ijepa} applies JEPA to images using
-masked prediction. LeWM~\cite{lewm2024} extends JEPA to
-locomotion tasks with ego-motion conditioning. We adapt
-LeWM to LiDAR BEV, replacing image encoders with convolutional
-BEV encoders and introducing SIGReg for stable training.
+\noindent\textbf{JEPA on Structured Data.}
+I-JEPA~\cite{assran2023ijepa} applies JEPA to images using spatial masking.
+LeJEPA~\cite{balestriero2024lejepa} formalizes JEPA for locomotion with
+SIGReg, showing that isotropy regularization prevents collapse and improves
+downstream planning. AD-L-JEPA~\cite{zhu2025adljepa} extends JEPA to
+autonomous driving with multi-frame LiDAR sequences, validating JEPA's
+applicability to sparse point clouds. Point-JEPA~\cite{saito2025pointjepa}
+applies masked prediction directly to 3D point clouds. Our work adapts
+LeJEPA to BEV grids and introduces action-conditioned prediction for
+ego-motion modeling, extending the framework from locomotion to LiDAR
+navigation.
 
-\textbf{LiDAR degeneracy detection.}
+\noindent\textbf{LiDAR Degeneracy Detection.}
+Geometric methods analyze the eigenvalues of the LiDAR point-to-plane
+Hessian to detect degenerate directions~\cite{zhang2016degeneracy}.
 GenZ-LIO~\cite{genzlio2024} and Adaptive-LIO~\cite{adaptivelio2024}
-address LiDAR degeneracy through geometric observability analysis.
-We propose a complementary model-based approach: prediction surprise
-in latent space serves as a sensor-agnostic degeneracy signal.
+build adaptive systems that adjust scan-matching weights in degenerate
+settings. These approaches require scan-matching pipelines and are
+specific to geometric degeneracy. In contrast, our surprise-based detector
+operates in learned latent space and captures any observation that
+deviates from the world model's predictions, including sensor failures
+not caused by geometric degeneracy.
 
-%------------------------------------------------------------
+% ── III. Method ───────────────────────────────────────────────────────────────
 \section{Method}
 \label{sec:method}
 
+\subsection{BEV Representation}
+
+Each LiDAR scan is projected onto a 4-channel Bird's-Eye View grid
+$(C{=}4, H, W)$ over a $50\text{m}{\times}50\text{m}$ spatial range.
+The four channels encode: maximum height, mean height, point count
+(log-normalized), and mean intensity within each voxel column.
+This representation is compact, rotation-agnostic, and naturally
+separates ground and object returns.
+
 \subsection{BEV Encoder}
 
-We represent each LiDAR scan as a 4-channel Bird's-Eye View grid
-$(C=4, H, W)$ encoding height statistics (max, mean, count,
-intensity) over a configurable spatial range. The encoder
-$f_\theta: \mathbb{R}^{C \times H \times W} \to \mathbb{R}^D$
-is a convolutional network with residual blocks and adaptive
-average pooling to a fixed latent size $D$.
+The encoder $f_\theta: \mathbb{R}^{C \times H \times W} \to \mathbb{R}^D$
+consists of four convolutional stages (Conv2d--BatchNorm--ReLU with
+stride-2 downsampling), doubling channels from $C_0{=}32$ to $8C_0{=}256$:
+\begin{equation*}
+  4 \!\to\! 32 \!\to\! 64 \!\to\! 128 \!\to\! 256 \text{ channels},
+  \quad H \!\to\! H/16
+\end{equation*}
+followed by global adaptive average pooling and a linear projector
+(Linear--BatchNorm) to the latent dimension $D$. The total encoder has
+${\sim}$0.5M parameters.
 
 \subsection{JEPA Predictor and Training}
 
-Given a sequence of observations $o_1, \ldots, o_T$ and ego-motion
-actions $a_1, \ldots, a_{T-1}$, we encode all frames:
-$z_t = f_\theta(o_t)$.
-The predictor $g_\phi: \mathbb{R}^D \times \mathbb{R}^A \to \mathbb{R}^D$
-is a 3-layer MLP that maps $(z_t, a_t) \mapsto \hat{z}_{t+1}$.
+Given a sequence $(o_1,\ldots,o_T,\, a_1,\ldots,a_{T-1})$, we encode all
+frames: $z_t = f_\theta(o_t) \in \mathbb{R}^D$.
+The predictor $g_\phi: \mathbb{R}^{D+A} \to \mathbb{R}^D$ is a 3-layer
+MLP (hidden dim 512, Dropout 0.1) mapping $(z_t, a_t) \mapsto \hat{z}_{t+1}$.
 
-The training objective is:
+The training objective combines one-step prediction loss with SIGReg:
 \begin{equation}
-  \mathcal{L} = \underbrace{\frac{1}{T-1}\sum_{t=1}^{T-1}
-    \|\hat{z}_{t+1} - z_{t+1}\|^2}_{\mathcal{L}_\text{pred}}
+  \mathcal{L} = \underbrace{\frac{1}{T{-}1}\sum_{t=1}^{T-1}
+    \|\hat{z}_{t+1} - \mathrm{sg}(z_{t+1})\|^2}_{\mathcal{L}_\text{pred}}
   + \lambda \cdot \mathcal{L}_\text{SIGReg}(Z)
   \label{eq:loss}
 \end{equation}
-where $Z = \{z_t\}$ is the set of all encoded frames in the batch,
-targets $z_{t+1}$ are detached (stop-gradient), and
-$\mathcal{L}_\text{SIGReg}$ is the Sign Isotropy Regularization
-from~\cite{lewm2024} that encourages unit-variance isotropic latents.
+where $\mathrm{sg}(\cdot)$ is stop-gradient (targets are detached), and
+$\mathcal{L}_\text{SIGReg}$ encourages the empirical distribution of $Z$
+to match an isotropic unit Gaussian via random sketching~\cite{balestriero2024lejepa}.
 
 \subsection{CEM Planning in Latent Space}
 
-Given a start state $z_\text{start}$ and goal state $z_\text{goal}$,
-we use the Cross-Entropy Method (CEM) to optimize an action
-sequence $a_{0:H-1}$ that minimizes latent distance to goal:
+Given start latent $z_s = f_\theta(o_s)$ and goal latent
+$z_g = f_\theta(o_g)$, we optimize an action sequence
+$\mathbf{a} = (a_0,\ldots,a_{H-1})$ to minimize goal distance:
 \begin{equation}
-  \min_{a_{0:H-1}} \left\| \prod_{t=0}^{H-1} g_\phi(z_t, a_t)
-    - z_\text{goal} \right\|^2
+  \min_{\mathbf{a}} \left\|
+    g_\phi^{(H)}(z_s, \mathbf{a}) - z_g
+  \right\|^2
 \end{equation}
-CEM iteratively refines a Gaussian distribution over action sequences
-by selecting elite samples and updating statistics (Algorithm~1).
-We use $N=512$ samples, $K=64$ elites, and 5 optimization steps.
+where $g_\phi^{(H)}$ denotes $H$ recursive applications of $g_\phi$
+starting from $z_s$.
+We use the Cross-Entropy Method (CEM, Algorithm~\ref{alg:cem}):
+iteratively sample $N$ action sequences from a Gaussian, evaluate each
+via rollout, and update the distribution using the top-$K$ elite samples.
+
+\begin{algorithm}[t]
+\caption{CEM Latent Planning}
+\label{alg:cem}
+\begin{algorithmic}[1]
+\REQUIRE $z_s, z_g$, horizon $H$, $N{=}512$, $K{=}64$, steps $S{=}5$
+\STATE $\mu \leftarrow \mathbf{0}_{H \times A}$, $\sigma \leftarrow \mathbf{1}_{H \times A}$
+\FOR{$s = 1$ \TO $S$}
+  \STATE Sample $\{\mathbf{a}^{(i)}\}_{i=1}^N \sim \mathcal{N}(\mu, \sigma^2)$
+  \STATE $c^{(i)} \leftarrow \|g_\phi^{(H)}(z_s, \mathbf{a}^{(i)}) - z_g\|^2$
+  \STATE $\mathcal{E} \leftarrow \text{top-}K \text{ by } c^{(i)} \downarrow$
+  \STATE $\mu \leftarrow \text{mean}(\mathcal{E})$, $\sigma \leftarrow \text{std}(\mathcal{E})$
+\ENDFOR
+\RETURN $\mu$
+\end{algorithmic}
+\end{algorithm}
 
 \subsection{Surprise-Based Degeneracy Detection}
 
-At each timestep $t$, we compute the one-step prediction error:
+At each timestep $t$, the one-step prediction error (surprise) is:
 \begin{equation}
   s_t = \|\hat{z}_{t+1} - z_{t+1}\|^2
   \label{eq:surprise}
 \end{equation}
-A degeneracy is flagged when $s_t$ exceeds an adaptive threshold
-$\mu + k\sigma$ (computed over a sliding window) for $w$ consecutive
-frames. This requires no additional training or labels.
+A degeneracy is flagged when $s_t$ exceeds the adaptive threshold
+$\tau = \hat{\mu}_s + k\hat{\sigma}_s$ (estimated online) for $w$
+consecutive frames. This requires no additional training, no anomaly
+labels, and naturally flags any deviation from learned dynamics—whether
+caused by sensor failures, sudden scene changes, or structural degeneracy.
 
-%------------------------------------------------------------
+% ── IV. Experiments ───────────────────────────────────────────────────────────
 \section{Experiments}
 \label{sec:experiments}
 
 \subsection{Setup}
 
-\textbf{Dataset.} We use the nuScenes mini split~\cite{caesar2020nuscenes}
-(39 sequences, 16 keyframes each, $\approx$624 total LiDAR scans).
-BEV grids are computed at $64\times64$ resolution with
-$50\text{m} \times 50\text{m}$ range.
+\noindent\textbf{Dataset.}
+We use the nuScenes mini split~\cite{caesar2020nuscenes}
+(39 sequences, 16 keyframes each, $\approx$624 LiDAR scans total).
+BEV grids are computed at $64{\times}64$ resolution unless stated.
+Actions are 3-DOF ego-motion vectors $(v_x, v_y, \omega)$.
 
-\textbf{Training.} All models are trained for 10,000 steps with
-batch size 16, Adam optimizer ($\text{lr}=3\times10^{-4}$),
-and the default config $\lambda=1.0$, $D=192$.
-The optimal model uses $\lambda=0.1$ (see Section~\ref{sec:ablation}).
+\noindent\textbf{Training.}
+All ablation models use 10K steps, batch size 16, Adam
+($\text{lr}{=}3{\times}10^{-4}$, weight decay $10^{-4}$), $D{=}192$.
+The \emph{optimal} model ($\lambda{=}0.1$, BEV $64{\times}64$) is
+trained for 20K steps, achieving final loss 0.0274.
 
-\textbf{Metrics.}
-\textit{Latent distance}: $\|z_\text{pred} - z_\text{goal}\|_2$
-after CEM rollout.
-\textit{Isotropy}: per-dimension std uniformity (lower = more isotropic).
-\textit{F1}: precision/recall on synthetic degeneracy labels.
+\noindent\textbf{Evaluation.}
+\textit{Latent distance}: $\|g_\phi^{(H)}(z_s, \hat{\mathbf{a}}) - z_g\|_2$
+after CEM rollout (lower is better).
+\textit{Isotropy} $\sigma_z$: global std of all latent embeddings (ideal: 1.0);
+\textit{Uniformity}: std of per-dimension stds (lower = more isotropic).
+\textit{F1}: harmonic mean of precision and recall on synthetic
+degeneracy labels.
 
 \subsection{Main Results}
 
-Table~\ref{tab:main_results} summarizes the performance of LeWM-LiDAR
-with the optimal configuration ($\lambda=0.1$, $D=192$, BEV $64\times64$).
+Table~\ref{tab:main_results} reports performance of the optimal
+LeWM-LiDAR ($\lambda{=}0.1$, $D{=}192$, BEV $64{\times}64$, 20K steps).
 
 \input{../outputs/tables/table_main_results.tex}
 
-The model achieves a latent distance of $2.36 \pm 0.70$ with
-planning latency of $\sim$5 ms. Degeneracy detection reaches
-F1=0.737 with high recall (0.946), making it suitable for
-safety-critical flagging where false negatives are costly.
-Figure~\ref{fig:planning} shows the distribution of planning
-latent distances and timing.
+The model achieves latent distance $2.36{\pm}0.70$ with planning
+latency ${\sim}5$~ms. Degeneracy detection reaches F1\,=\,0.737 with
+high recall (0.946), appropriate for safety-critical applications where
+false negatives are costly. All 192 latent dimensions are active
+($\sigma_z{=}0.975$, uniformity${\approx}0.025$).
 
 \begin{figure}[t]
   \centering
-  \includegraphics[width=0.48\textwidth]{planning_results.pdf}
-  \caption{Planning performance. \textit{Left}: distribution of
-    latent distances to goal. \textit{Right}: planning time per query.}
+  \includegraphics[width=\columnwidth]{planning_results.pdf}
+  \caption{Planning performance. \textit{Left}: distribution of latent
+    distances to goal across 39 episodes.
+    \textit{Right}: CEM planning time per query.}
   \label{fig:planning}
 \end{figure}
 
 \subsection{Latent Space Analysis}
 
-Figure~\ref{fig:latent} shows the learned latent space.
-t-SNE reveals structured clustering by sequence, indicating that
-the encoder captures scene-level features. The per-dimension std
-histogram confirms near-ideal isotropy ($\sigma_z \approx 0.975$,
-Fig.~\ref{fig:sigreg}): all 192 dimensions are active and
-uniformly distributed, validating SIGReg effectiveness.
+Fig.~\ref{fig:latent}a shows t-SNE of all 624 encoded frames, colored
+by timestep within sequence. Nearby timesteps cluster together, indicating
+temporal coherence, while different sequences are well-separated,
+showing scene discriminability. Fig.~\ref{fig:latent}b plots the
+per-dimension standard deviation histogram: all 192 dimensions lie in
+$[0.51, 1.39]$ with mean ${\approx}0.97$, confirming that SIGReg
+successfully prevents both collapse and explosion.
 
 \begin{figure}[t]
   \centering
   \begin{subfigure}[b]{0.48\columnwidth}
     \includegraphics[width=\textwidth]{tsne_latent.pdf}
-    \caption{t-SNE of latent space (colored by timestep).}
+    \caption{t-SNE (colored by timestep within sequence).}
     \label{fig:tsne}
   \end{subfigure}
   \hfill
   \begin{subfigure}[b]{0.48\columnwidth}
     \includegraphics[width=\textwidth]{sigreg_std_hist.pdf}
-    \caption{Per-dim std histogram. Red line = ideal ($\sigma=1$).}
-    \label{fig:sigreg}
+    \caption{Per-dim std. Red: ideal ($\sigma{=}1$).}
+    \label{fig:sigreg_hist}
   \end{subfigure}
-  \caption{Latent space analysis.}
+  \caption{Latent space analysis. All 192 dims are active and near-isotropic.}
   \label{fig:latent}
 \end{figure}
 
-\subsection{Degeneracy Detection}
+\subsection{Degeneracy Detection on Synthetic Perturbations}
 
-We evaluate the detector on synthetic perturbations of three types:
-\textit{teleportation} (sudden pose jump), \textit{freeze}
-(repeated identical scans), and \textit{noise burst}
-(additive Gaussian noise). Figure~\ref{fig:surprise} shows
-surprise scores for a clean and perturbed sequence.
+We inject three types of perturbations into 50\% of test sequences:
+\textit{teleportation} (replace one frame with a distant frame),
+\textit{freeze} (repeat a frame for 2--5 steps), and
+\textit{noise burst} (add $\mathcal{N}(0,\,4)$ to BEV channels for 2--5 steps).
+Fig.~\ref{fig:surprise} shows that surprise scores spike at perturbed
+regions. At the 90th percentile threshold,
+the detector achieves precision\,=\,0.603, recall\,=\,0.946, F1\,=\,0.737.
 
 \begin{figure}[t]
   \centering
-  \includegraphics[width=0.48\textwidth]{surprise_timeline.pdf}
-  \caption{Surprise scores $s_t$ for a clean sequence (top) and
-    a perturbed sequence (bottom). The red shaded region indicates
-    the ground-truth perturbation window.}
+  \includegraphics[width=\columnwidth]{surprise_timeline.pdf}
+  \caption{Surprise $s_t$ for a clean (top) and perturbed (bottom)
+    sequence. Shaded region: ground-truth perturbation.
+    Surprise spikes clearly at the perturbation.}
   \label{fig:surprise}
 \end{figure}
 
 \subsection{Ablation Studies}
 \label{sec:ablation}
 
-\textbf{SIGReg weight $\lambda$.}
-Table~\ref{tab:ablation_lambda} and Fig.~\ref{fig:abl_lambda}
-show that $\lambda=0.1$ achieves the best trade-off, outperforming
-both $\lambda=0$ (no regularization) and $\lambda \geq 1$
-(over-regularization). Without SIGReg, the latent space becomes
-highly anisotropic (uniformity=0.112) and planning degrades
-(latent dist=24.30). With $\lambda=0.1$, uniformity drops to
-0.037 and latent distance to 5.62. Interestingly, $\lambda \geq 1$
-hurts prediction quality on LiDAR BEV, suggesting that sparse
-geometric inputs require gentler regularization than pixel data.
+\noindent\textbf{SIGReg weight $\lambda$.}
+Table~\ref{tab:ablation_lambda} and Fig.~\ref{fig:abl_lambda} show results
+for four $\lambda$ values. Without SIGReg ($\lambda{=}0$), the latent
+space becomes highly anisotropic (uniformity\,=\,0.112) and planning
+degrades significantly (dist\,=\,24.48). With $\lambda{=}0.1$, uniformity
+drops to 0.037 and latent distance to 5.62 (F1\,=\,0.716).
+Critically, $\lambda{\ge}1$ \emph{hurts} prediction quality on LiDAR BEV
+($\lambda{=}1.0$: dist\,=\,19.45), unlike pixel-based JEPA where
+$\lambda{=}1.0$ is optimal. We attribute this to implicit regularization
+from BEV voxelization: the discretization process already compresses
+geometric information, so strong explicit regularization over-constrains
+the dynamics predictor.
 
 \input{../outputs/tables/table_ablation_lambda.tex}
 
 \begin{figure}[t]
   \centering
-  \includegraphics[width=0.48\textwidth]{ablation_lambda.pdf}
-  \caption{Effect of SIGReg weight $\lambda$ on planning (latent
-    distance, left) and degeneracy detection (F1, right).
-    $\lambda=0.1$ achieves best performance in both metrics.}
+  \includegraphics[width=\columnwidth]{ablation_lambda.pdf}
+  \caption{Effect of SIGReg weight $\lambda$.
+    $\lambda{=}0.1$ achieves the best planning (left)
+    and detection (right). $\lambda{=}0$ and $\lambda{\ge}1$ both degrade.}
   \label{fig:abl_lambda}
 \end{figure}
 
-\textbf{Latent dimensionality.}
-Table~\ref{tab:ablation_dim} reveals a planning–detection trade-off:
-$D=192$ achieves the best planning performance (dist=4.66) while
-$D=384$ achieves the highest detection F1 (0.737). Higher-dimensional
-spaces capture richer anomaly signatures but are harder for CEM
-to optimize. We recommend $D=192$ for balanced performance.
+\noindent\textbf{Latent dimensionality.}
+Table~\ref{tab:ablation_dim} reveals a clear planning--detection
+trade-off. $D{=}192$ achieves the best planning (dist\,=\,4.66), while
+$D{=}384$ achieves the best detection F1 (0.737). We hypothesize that
+higher-dimensional latents capture finer-grained anomaly signatures, but
+CEM optimization becomes harder in high-dimensional action space.
+We recommend $D{=}192$ for balanced performance.
 
 \input{../outputs/tables/table_ablation_dim.tex}
 
-\textbf{BEV resolution.}
-Table~\ref{tab:ablation_bev} shows that $64\times64$ outperforms
-$256\times256$ on the mini split across all metrics. The
-high-resolution variant exhibits $\sigma_z=2.04$ (far from ideal),
-indicating that the encoder lacks capacity to compress the larger
-input with limited training data. This gap is expected to narrow
-with larger datasets.
+\noindent\textbf{BEV resolution.}
+Table~\ref{tab:ablation_bev} shows that $64{\times}64$ outperforms
+$256{\times}256$ on the mini split. The high-resolution variant exhibits
+$\sigma_z{=}2.04$ (far from ideal), indicating encoder saturation:
+with only 39 sequences, the model cannot learn to compress $256{\times}256$
+inputs effectively. We expect this gap to narrow with larger datasets.
 
 \input{../outputs/tables/table_ablation_bev.tex}
 
-\begin{figure}[t]
-  \centering
-  \includegraphics[width=0.48\textwidth]{ablation_bev.pdf}
-  \caption{Effect of BEV resolution. $64\times64$ achieves the
-    best isotropy, planning quality, and detection F1 on the
-    nuScenes mini dataset.}
-  \label{fig:abl_bev}
-\end{figure}
+% ── V. Discussion ─────────────────────────────────────────────────────────────
+\section{Discussion}
+\label{sec:discussion}
 
-%------------------------------------------------------------
+\noindent\textbf{Why $\lambda{=}0.1$ for LiDAR?}
+BEV voxelization projects continuous point clouds onto a discrete grid,
+discarding fine-grained geometric variation within each cell. This
+implicit compression acts as a form of regularization: the latent space
+is already less prone to collapse than in pixel-based settings. Strong
+explicit SIGReg ($\lambda{\ge}1$) then over-regularizes, forcing latents
+toward an isotropic Gaussian at the cost of predictive capacity.
+Moderate $\lambda{=}0.1$ provides just enough regularization to prevent
+anisotropy without sacrificing dynamics modeling.
+
+\noindent\textbf{Limitations.}
+(1) We evaluate on the nuScenes mini split (39 sequences), which limits
+statistical power. Scaling to the full trainval split (28K+ keyframes)
+is needed to confirm findings.
+(2) Degeneracy evaluation uses synthetic perturbations; real-world
+degeneracy (e.g., featureless tunnels) may have different distributions.
+(3) We do not compare against baseline world models (e.g., DreamerV3-LiDAR)
+due to the lack of publicly available LiDAR-adapted implementations.
+(4) Actions are assumed available at test time; an action estimator
+would be needed for fully autonomous deployment.
+
+% ── VI. Conclusion ────────────────────────────────────────────────────────────
 \section{Conclusion}
 \label{sec:conclusion}
 
-We presented LeWM-LiDAR, a JEPA-based world model for LiDAR BEV
-that enables both latent-space planning and surprise-based
-degeneracy detection. Key findings include: (1) moderate SIGReg
-($\lambda=0.1$) is optimal for LiDAR data, unlike the $\lambda=1$
-used for pixel-based JEPA; (2) planning and detection trade off
-with respect to latent dimensionality, with $D=192$ offering
-the best balance; and (3) compact BEV representations (64px)
-outperform high-resolution inputs on small datasets.
+We presented LeWM-LiDAR, a JEPA-based world model for LiDAR BEV that
+enables latent-space planning (2.3~ms/query) and surprise-based
+degeneracy detection (F1\,=\,0.737) from a single model trained with
+two loss terms. Key findings: moderate SIGReg ($\lambda{=}0.1$) is
+optimal for LiDAR BEV; $D{=}192$ balances planning and detection;
+compact BEV ($64{\times}64$) outperforms high-resolution on small datasets.
 
-Future work includes scaling to the full nuScenes trainval split
-(28K+ keyframes), integrating with online LIO systems for
-real-time degeneracy signaling, and extending the world model
-to support goal-conditioned navigation with semantic waypoints.
+Future work: scaling to nuScenes trainval, integrating with online LIO
+for real-time degeneracy signaling, and replacing synthetic perturbations
+with real degenerate sequences from structured environments.
 
-%------------------------------------------------------------
-\bibliographystyle{IEEEtran}
+% ── References ────────────────────────────────────────────────────────────────
+\bibliographystyle{unsrtnat}
 \bibliography{references}
 
 \end{document}

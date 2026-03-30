@@ -63,22 +63,24 @@ def table_ablation_dim(results, output_dir):
     tex = [
         r'\begin{table}[t]',
         r'\centering',
-        r'\caption{Ablation: Effect of latent space dimensionality.}',
+        r'\caption{Ablation: Effect of latent space dimensionality.'
+        r' $D{=}192$ gives best planning; $D{=}384$ gives best detection F1.}',
         r'\label{tab:ablation_dim}',
-        r'\begin{tabular}{lcccc}',
+        r'\begin{tabular}{lccccc}',
         r'\toprule',
         r'Dim & Eff.\ Dims & $\sigma_z$'
-        r' & Latent Dist.\ $\downarrow$ & Time (ms) \\',
+        r' & Latent Dist.\ $\downarrow$ & Time (ms) & F1 $\uparrow$ \\',
         r'\midrule',
     ]
 
     for r in sorted(rows, key=lambda x: x['latent_dim']):
+        f1 = f"{r['best_f1']:.3f}" if 'best_f1' in r else '---'
         tex.append(
             f"  {r['latent_dim']} & "
             f"{r['effective_dims']}/{r['total_dims']} & "
             f"{r['z_global_std']:.3f} & "
             f"{r['latent_dist_mean']:.2f} & "
-            f"{r['plan_time_ms']:.0f} \\\\"
+            f"{r['plan_time_ms']:.0f} & {f1} \\\\"
         )
 
     tex += [r'\bottomrule', r'\end{tabular}', r'\end{table}']
@@ -95,11 +97,12 @@ def table_ablation_bev(results, output_dir):
     tex = [
         r'\begin{table}[t]',
         r'\centering',
-        r'\caption{Ablation: Effect of BEV input resolution.}',
+        r'\caption{Ablation: Effect of BEV input resolution.'
+        r' $64{\times}64$ outperforms $256{\times}256$ on the mini split.}',
         r'\label{tab:ablation_bev}',
         r'\begin{tabular}{lcccc}',
         r'\toprule',
-        r'Resolution & $\sigma_z$'
+        r'Resolution & $\sigma_z$ $\rightarrow 1$'
         r' & Latent Dist.\ $\downarrow$ & Time (ms) & F1 $\uparrow$ \\',
         r'\midrule',
     ]
