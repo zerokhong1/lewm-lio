@@ -1,0 +1,15 @@
+\begin{table}[t]
+\centering
+\caption{Ablation: Effect of latent space dimensionality. $D{=}192$ gives best planning; $D{=}384$ gives best detection F1.}
+\label{tab:ablation_dim}
+\begin{tabular}{lccccc}
+\toprule
+Dim & Eff.\ Dims & $\sigma_z$ & Latent Dist.\ $\downarrow$ & Time (ms) & F1 $\uparrow$ \\
+\midrule
+  64 & 64/64 & 1.131 & 5.76 & 2 & 0.627 \\
+  128 & 128/128 & 0.995 & 7.08 & 2 & 0.667 \\
+  192 & 192/192 & 0.838 & 4.66 & 2 & 0.627 \\
+  384 & 384/384 & 1.026 & 16.16 & 2 & 0.737 \\
+\bottomrule
+\end{tabular}
+\end{table}

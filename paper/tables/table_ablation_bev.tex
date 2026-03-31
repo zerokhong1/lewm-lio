@@ -1,0 +1,14 @@
+\begin{table}[t]
+\centering
+\caption{Ablation: Effect of BEV input resolution. $64{\times}64$ outperforms $256{\times}256$ on the mini split.}
+\label{tab:ablation_bev}
+\begin{tabular}{lcccc}
+\toprule
+Resolution & $\sigma_z$ $\rightarrow 1$ & Latent Dist.\ $\downarrow$ & Time (ms) & F1 $\uparrow$ \\
+\midrule
+  64$\times$64 & 0.938 & 7.18 & 2 & 0.729 \\
+  128$\times$128 & 1.013 & 8.93 & 7 & 0.657 \\
+  256$\times$256 & 2.038 & 24.19 & 2 & 0.597 \\
+\bottomrule
+\end{tabular}
+\end{table}

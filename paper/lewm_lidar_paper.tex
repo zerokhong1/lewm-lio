@@ -33,7 +33,7 @@
 for LiDAR Navigation and Degeneracy Detection}
 
 \author{
-  Thai Nguyen \\
+  Thai Cong \\
   \textit{[Institution]} \\
   \texttt{[email]}
 }
@@ -268,7 +268,7 @@ degeneracy labels.
 Table~\ref{tab:main_results} reports performance of the optimal
 LeWM-LiDAR ($\lambda{=}0.1$, $D{=}192$, BEV $64{\times}64$, 20K steps).
 
-\input{../outputs/tables/table_main_results.tex}
+\input{tables/table_main_results.tex}
 
 The model achieves latent distance $2.36{\pm}0.70$ with planning
 latency ${\sim}5$~ms. Degeneracy detection reaches F1\,=\,0.737 with
@@ -347,7 +347,7 @@ from BEV voxelization: the discretization process already compresses
 geometric information, so strong explicit regularization over-constrains
 the dynamics predictor.
 
-\input{../outputs/tables/table_ablation_lambda.tex}
+\input{tables/table_ablation_lambda.tex}
 
 \begin{figure}[t]
   \centering
@@ -366,7 +366,7 @@ higher-dimensional latents capture finer-grained anomaly signatures, but
 CEM optimization becomes harder in high-dimensional action space.
 We recommend $D{=}192$ for balanced performance.
 
-\input{../outputs/tables/table_ablation_dim.tex}
+\input{tables/table_ablation_dim.tex}
 
 \noindent\textbf{BEV resolution.}
 Table~\ref{tab:ablation_bev} shows that $64{\times}64$ outperforms
@@ -375,7 +375,7 @@ $\sigma_z{=}2.04$ (far from ideal), indicating encoder saturation:
 with only 39 sequences, the model cannot learn to compress $256{\times}256$
 inputs effectively. We expect this gap to narrow with larger datasets.
 
-\input{../outputs/tables/table_ablation_bev.tex}
+\input{tables/table_ablation_bev.tex}
 
 % ── V. Discussion ─────────────────────────────────────────────────────────────
 \section{Discussion}

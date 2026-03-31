@@ -1,0 +1,15 @@
+\begin{table}[t]
+\centering
+\caption{Ablation: Effect of SIGReg regularization weight $\lambda$.}
+\label{tab:ablation_lambda}
+\begin{tabular}{lcccc}
+\toprule
+$\lambda$ & $\sigma_z$ & Uniformity & Latent Dist.\ $\downarrow$ & F1 $\uparrow$ \\
+\midrule
+  0.0 & 1.887 & 0.1119 & 24.30 & 0.567 \\
+  0.1 & 0.725 & 0.0372 & 5.62 & 0.716 \\
+  1.0 & 1.709 & 0.1000 & 19.53 & 0.597 \\
+  10.0 & 1.077 & 0.0268 & 8.19 & 0.627 \\
+\bottomrule
+\end{tabular}
+\end{table}
